@@ -17,7 +17,7 @@ function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { de
 var _lookOver = (0, _debug2.default)('ImageRotator');
 
 var _resetOrientation = function _resetOrientation(srcBase64, srcOrientation) {
-    return function (resolve, reject) {
+    return new Promise(function (resolve, reject) {
         var img = new Image();
 
         img.onload = function () {
@@ -66,7 +66,7 @@ var _resetOrientation = function _resetOrientation(srcBase64, srcOrientation) {
         };
 
         img.src = srcBase64;
-    };
+    });
 };
 
 var _getOrientation = function _getOrientation(file) {
