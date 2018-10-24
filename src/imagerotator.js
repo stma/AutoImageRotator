@@ -3,7 +3,7 @@ import debug from 'debug';
 
 const _lookOver = debug('ImageRotator');
 
-const _resetOrientation = (srcBase64, srcOrientation) => new Promise(
+const _resetOrientation = (meta) => new Promise(
     (resolve, reject) => {
         const img = new Image();
 
@@ -13,46 +13,72 @@ const _resetOrientation = (srcBase64, srcOrientation) => new Promise(
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
 
-            if (4 < srcOrientation && srcOrientation < 9) {
-                canvas.width = height;
-                canvas.height = width;
+            let startX = 0;
+            let startY = 0;
+
+            let scale = 1;
+
+            if (meta.size) {
+                const ratio = meta.size[0] / meta.size[1];
+                const ratioX = meta.size[0] / width;
+                const ratioY = meta.size[1] / height;
+
+                if (ratioX > ratioY) {
+                    scale = ratioX;
+                    canvas.width = width;
+                    canvas.height = width / ratio;
+                    startY = (height * scale - meta.size[1]) / (2 * scale);
+                } else {
+                    scale = ratioY;
+                    canvas.height = height;
+                    canvas.width = height * ratio;
+                    startX = (width * scale - meta.size[0]) / (2 * scale);
+                }
             } else {
                 canvas.width = width;
                 canvas.height = height;
             }
 
-            switch (srcOrientation) {
+            const lengthX = canvas.width;
+            const lengthY = canvas.height;
+
+            if (4 < meta.orientation && meta.orientation < 9) {
+                canvas.width = canvas.height;
+                canvas.height = canvas.width;
+            }
+
+            switch (meta.orientation) {
             case 2:
-                ctx.transform(-1, 0, 0, 1, width, 0);
+                ctx.transform(-1, 0, 0, 1, canvas.width, 0);
                 break;
             case 3:
-                ctx.transform(-1, 0, 0, -1, width, height );
+                ctx.transform(-1, 0, 0, -1, canvas.width, canvas.height);
                 break;
             case 4:
-                ctx.transform(1, 0, 0, -1, 0, height );
+                ctx.transform(1, 0, 0, -1, 0, canvas.height);
                 break;
             case 5:
                 ctx.transform(0, 1, 1, 0, 0, 0);
                 break;
             case 6:
-                ctx.transform(0, 1, -1, 0, height, 0);
+                ctx.transform(0, 1, -1, 0, canvas.height, 0);
                 break;
             case 7:
-                ctx.transform(0, -1, -1, 0, height, width);
+                ctx.transform(0, -1, -1, 0, canvas.height, canvas.width);
                 break;
             case 8:
-                ctx.transform(0, -1, 1, 0, 0, width);
+                ctx.transform(0, -1, 1, 0, 0, canvas.width);
                 break;
             default:
                 break;
             }
 
-            ctx.drawImage(img, 0, 0);
+            ctx.drawImage(img, startX, startY, lengthX, lengthY, 0, 0, lengthX, lengthY);
 
             resolve(canvas.toDataURL());
         };
 
-        img.src = srcBase64;
+        img.src = meta.srcBase64;
     }
 );
 
@@ -69,21 +95,25 @@ const _getDataUrl = (meta) => new Promise(
     }
 );
 
-const _getOrientation = (file) => (resolve, reject) => {
-    const reader = new FileReader();
+const BASE64_MARKER = ';base64,';
+const _convertDataURIToBinary = (dataURI) => {
+    const base64Index = dataURI.indexOf(BASE64_MARKER) + BASE64_MARKER.length;
+    const raw = window.atob(dataURI.substring(base64Index));
 
-    reader.onload = (event) => {
-        const arrayBuffer = event.target.result;
-        const view = new DataView(arrayBuffer);
+    return Uint8Array.from(
+        Array.prototype.map.call(
+            raw,
+            (x) => x.charCodeAt(0)
+        )
+    );
+};
 
-        const result = {
-            orientation: 1,
-            file,
-        };
+const _getOrientation = (meta) => new Promise(
+    (resolve, reject) => {
+        const view = new DataView(_convertDataURIToBinary(meta.srcBase64).buffer);
 
         if (view.getUint16(0, false) !== 0xFFD8) {
-            console.log('Error -2');
-            resolve(result);
+            resolve(meta);
         }
 
         const length = view.byteLength;
@@ -95,8 +125,7 @@ const _getOrientation = (file) => (resolve, reject) => {
 
             if (marker === 0xFFE1) {
                 if (view.getUint32(offset += 2, false) !== 0x45786966) {
-                    console.log('Error: -1');
-                    resolve(result);
+                    resolve(meta);
                 }
                 const little = view.getUint16(offset += 6, false) === 0x4949;
                 offset += view.getUint32(offset + 4, little);
@@ -105,8 +134,8 @@ const _getOrientation = (file) => (resolve, reject) => {
 
                 for (let i = 0; i < tags; i++) {
                     if (view.getUint16(offset + (i * 12), little) === 0x0112) {
-                        result.orientation = view.getUint16(offset + (i * 12) + 8, little);
-                        resolve(result);
+                        meta.orientation = view.getUint16(offset + (i * 12) + 8, little);
+                        resolve(meta);
                     }
                 }
             } else if ((marker & 0xFF00) !== 0xFF00) {
@@ -115,21 +144,24 @@ const _getOrientation = (file) => (resolve, reject) => {
                 offset += view.getUint16(offset, false);
             }
         }
-        console.log('Error no clue');
-        resolve(result);
-    };
+        resolve(meta);
+    }
+);
 
-    reader.readAsArrayBuffer(file.slice(0, 64 * 1024));
-};
-
-export default (file) => {
+export default (file, size) => {
     _lookOver('Rotate Image called');
 
-    return new Promise(
-        _getOrientation(file)
+    return Promise.resolve(
+        {
+            file,
+            orientation: 1,
+            size: size && size.split('x'),
+        }
     ).then(
         (meta) => _getDataUrl(meta)
     ).then(
-        (meta) => _resetOrientation(meta.srcBase64, meta.orientation)
+        (meta) => _getOrientation(meta)
+    ).then(
+        (meta) => _resetOrientation(meta)
     );
 };
