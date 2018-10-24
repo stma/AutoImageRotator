@@ -8,10 +8,6 @@ var _debug = require('debug');
 
 var _debug2 = _interopRequireDefault(_debug);
 
-var _base64Js = require('base64-js');
-
-var _base64Js2 = _interopRequireDefault(_base64Js);
-
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 var _lookOver = (0, _debug2.default)('ImageRotator');
@@ -69,6 +65,19 @@ var _resetOrientation = function _resetOrientation(srcBase64, srcOrientation) {
     });
 };
 
+var _getDataUrl = function _getDataUrl(meta) {
+    return new Promise(function (resolve, reject) {
+        var reader = new FileReader();
+
+        reader.onload = function (event) {
+            meta.srcBase64 = event.target.result;
+            resolve(meta);
+        };
+
+        reader.readAsDataURL(meta.file);
+    });
+};
+
 var _getOrientation = function _getOrientation(file) {
     return function (resolve, reject) {
         var reader = new FileReader();
@@ -77,7 +86,15 @@ var _getOrientation = function _getOrientation(file) {
             var arrayBuffer = event.target.result;
             var view = new DataView(arrayBuffer);
 
-            if (view.getUint16(0, false) !== 0xFFD8) reject(-2);
+            var result = {
+                orientation: 1,
+                file: file
+            };
+
+            if (view.getUint16(0, false) !== 0xFFD8) {
+                console.log('Error -2');
+                resolve(result);
+            }
 
             var length = view.byteLength;
             var offset = 2;
@@ -88,7 +105,8 @@ var _getOrientation = function _getOrientation(file) {
 
                 if (marker === 0xFFE1) {
                     if (view.getUint32(offset += 2, false) !== 0x45786966) {
-                        reject(-1);
+                        console.log('Error: -1');
+                        resolve(result);
                     }
                     var little = view.getUint16(offset += 6, false) === 0x4949;
                     offset += view.getUint32(offset + 4, little);
@@ -97,10 +115,8 @@ var _getOrientation = function _getOrientation(file) {
 
                     for (var i = 0; i < tags; i++) {
                         if (view.getUint16(offset + i * 12, little) === 0x0112) {
-                            resolve({
-                                orientation: view.getUint16(offset + i * 12 + 8, little),
-                                srcBase64: _base64Js2.default.fromByteArray(arrayBuffer)
-                            });
+                            result.orientation = view.getUint16(offset + i * 12 + 8, little);
+                            resolve(result);
                         }
                     }
                 } else if ((marker & 0xFF00) !== 0xFF00) {
@@ -109,20 +125,21 @@ var _getOrientation = function _getOrientation(file) {
                     offset += view.getUint16(offset, false);
                 }
             }
-            reject(-1);
+            console.log('Error no clue');
+            resolve(result);
         };
 
         reader.readAsArrayBuffer(file.slice(0, 64 * 1024));
     };
 };
 
-var rotateImage = function rotateImage(file) {
+exports.default = function (file) {
     _lookOver('Rotate Image called');
 
     return new Promise(_getOrientation(file)).then(function (meta) {
+        return _getDataUrl(meta);
+    }).then(function (meta) {
         return _resetOrientation(meta.srcBase64, meta.orientation);
     });
 };
-
-exports.default = rotateImage;
 //# sourceMappingURL=imagerotator.js.map

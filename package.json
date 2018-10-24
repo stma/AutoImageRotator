@@ -29,7 +29,6 @@
     "npm-run-all": "^4.1.3"
   },
   "dependencies": {
-    "base64-js": "^1.3.0",
     "debug": "^4.1.0"
   },
   "scripts": {
@@ -54,11 +53,21 @@
     },
     "globals": {
       "DataView": true,
-      "Promise": true
+      "Promise": true,
+      "Uint8Array": true
     },
     "rules": {
-      "max-len": ["warn", {"code": 120}],
-      "indent": ["error", 4]
+      "max-len": [
+        "warn",
+        {
+          "code": 120
+        }
+      ],
+      "indent": [
+        "error",
+        4
+      ],
+      "no-console": "off"
     },
     "parser": "babel-eslint"
   }
