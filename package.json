@@ -1,6 +1,6 @@
 {
-  "name": "autoimagerotator",
-  "version": "1.0.0",
+  "name": "auto-image-rotator",
+  "version": "0.1.0",
   "description": "Show image in right orientation in html pages. Solution after: Bart Kalisz",
   "main": "dist/imagerotator.js",
   "repository": {
